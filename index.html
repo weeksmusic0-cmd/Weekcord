@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WeekCord | Arkadaş Ortamı</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="auth-screen" class="fade-in">
+        <div class="auth-box">
+            <h2>WeekCord'a Hoş Geldin</h2>
+            <div id="auth-error" style="color: #ed4245; margin-bottom: 10px; display: none;"></div>
+            <input type="text" id="usernameInput" placeholder="Kullanıcı Adı">
+            <input type="password" id="passwordInput" placeholder="Şifre">
+            <button id="loginBtn">Giriş Yap</button>
+            <button id="registerBtn" class="secondary">Kayıt Ol</button>
+        </div>
+    </div>
+
+    <div id="app-screen" style="display: none;">
+        <div class="sidebar">
+            <div class="sidebar-header"><h3>Sohbetler</h3></div>
+            <div class="friend-add-box">
+                <input type="text" id="addFriendInput" placeholder="Arkadaş ara...">
+                <button id="addFriendBtn">Ekle</button>
+            </div>
+            <div class="friend-list" id="friendListContainer"></div>
+            
+            <div class="user-panel">
+                <div class="user-info">
+                    <div class="friend-avatar" id="myAvatar">?</div>
+                    <strong id="myUsernameDisplay">Yükleniyor...</strong>
+                </div>
+                <div class="voice-controls">
+                    <button id="muteBtn" title="Sustur">🎤</button>
+                    <button id="deafenBtn" title="Sağırlaştır">🎧</button>
+                    <button id="logoutBtn" title="Çıkış">🚪</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="chat-area">
+            <div class="chat-header">
+                <span id="currentChatName"># genel-sohbet</span>
+                <button class="call-btn" id="startCallBtn">📞 Sesli Ara</button>
+            </div>
+            <div class="messages" id="messagesContainer"></div>
+            <div class="chat-input">
+                <form id="chatForm">
+                    <input type="text" id="messageInput" placeholder="Mesaj gönder..." autocomplete="off">
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div id="call-overlay" class="fade-in" style="display: none;">
+        <div class="call-avatar speaking" id="callMyAvatar">B</div>
+        <h2 style="color:white; margin-top:20px;">Arama Yapılıyor...</h2>
+        <button class="end-call-btn" id="endCallBtn" style="margin-top:30px;">📞 Kapat</button>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
