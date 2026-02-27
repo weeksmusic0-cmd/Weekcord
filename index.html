@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WeekCord | Arkadaş Ortamı</title>
+    <title>WeekCord</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="auth-screen" class="fade-in">
+    <div id="auth-screen">
         <div class="auth-box">
-            <h2>WeekCord'a Hoş Geldin</h2>
+            <h2>WeekCord</h2>
             <input type="text" id="usernameInput" placeholder="Kullanıcı Adı">
             <input type="password" id="passwordInput" placeholder="Şifre">
             <button id="loginBtn">Giriş Yap</button>
@@ -20,30 +20,28 @@
 
     <div id="app-screen" style="display: none;">
         <div class="sidebar">
-            <div class="sidebar-header"><h3 id="friendsHeader">Çevrimiçi Arkadaşlar</h3></div>
+            <div class="sidebar-header">Çevrimiçi Arkadaşlar</div>
             <div class="friend-add-box">
-                <input type="text" id="addFriendInput" placeholder="Arkadaş ara...">
+                <input type="text" id="addFriendInput" placeholder="Kullanıcı adı...">
                 <button id="addFriendBtn">Ekle</button>
             </div>
-            <div class="friend-list" id="friendListContainer">
-                </div>
-            
+            <div class="friend-list" id="friendListContainer"></div>
             <div class="user-panel">
                 <div class="user-info">
                     <div class="friend-avatar" id="myAvatar">?</div>
-                    <strong id="myUsernameDisplay">Yükleniyor...</strong>
+                    <strong id="myUsernameDisplay">...</strong>
                 </div>
                 <div class="voice-controls">
-                    <button id="muteBtn" title="Sustur">🎤</button>
-                    <button id="deafenBtn" title="Sağırlaştır">🎧</button>
-                    <button id="logoutBtn" title="Çıkış">🚪</button>
+                    <button id="muteBtn">🎤</button>
+                    <button id="deafenBtn">🎧</button>
+                    <button id="logoutBtn">🚪</button>
                 </div>
             </div>
         </div>
 
         <div class="chat-area">
             <div class="chat-header">
-                <span id="currentChatName">Çevrimiçi Arkadaşlar</span>
+                <span id="currentChatName">Sohbet Seçin</span>
                 <button class="call-btn" id="startCallBtn" style="display: none;">📞 Sesli Ara</button>
             </div>
             
@@ -52,32 +50,32 @@
                 <p>Ama bir seçeneğin var!</p>
                 <div class="bot-add-card">
                     <div class="friend-avatar" style="background:#1abc9c;">W</div>
-                    <div style="text-align: left;">
-                        <strong style="color:white; font-size: 18px;">Week Bot <span style="background:#5865f2; font-size:10px; padding:2px 4px; border-radius:3px;">BOT</span></strong>
-                        <div style="color:#b9bbbe; font-size:12px;">Sohbet etmek için her zaman burada.</div>
+                    <div>
+                        <strong>Week Bot <span class="bot-tag">BOT</span></strong>
+                        <div style="font-size:12px; color:#b9bbbe;">Sohbet etmek için hazır.</div>
                     </div>
                     <button id="addWeekBotBtn" class="add-bot-btn">Arkadaş Ekle</button>
                 </div>
             </div>
 
             <div class="messages" id="messagesContainer" style="display: none;"></div>
-            
             <div id="botOptionsContainer" class="bot-options-container" style="display: none;"></div>
-
+            
             <div class="chat-input" id="chatInputContainer" style="display: none;">
                 <form id="chatForm">
-                    <input type="text" id="messageInput" placeholder="Mesaj gönder..." autocomplete="off">
+                    <input type="text" id="messageInput" placeholder="Mesaj yaz..." autocomplete="off">
                 </form>
             </div>
         </div>
     </div>
 
+    <div id="notification-container" class="notification-container"></div>
     <audio id="remoteAudio" autoplay></audio>
 
-    <div id="call-overlay" class="fade-in" style="display: none;">
-        <div class="call-avatar speaking" id="callMyAvatar">B</div>
-        <h2 id="callStatusText" style="color:white; margin-top:20px;">Arama Yapılıyor...</h2>
-        <button class="end-call-btn" id="endCallBtn" style="margin-top:30px;">📞 Kapat</button>
+    <div id="call-overlay" style="display: none;">
+        <div class="call-avatar speaking" id="callMyAvatar">?</div>
+        <h2 id="callStatusText" style="color:white; margin-top:20px;">Arama...</h2>
+        <button class="end-call-btn" id="endCallBtn">📞 Kapat</button>
     </div>
 
     <script type="module" src="app.js"></script>
