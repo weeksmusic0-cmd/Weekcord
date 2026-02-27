@@ -2,23 +2,21 @@
 * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'gg sans', 'Helvetica Neue', Arial, sans-serif; }
 body { background-color: #313338; color: #dbdee1; height: 100vh; display: flex; overflow: hidden; }
 
-/* Scrollbar'ı Gizle */
+/* Scrollbar'ı her yerde gizle */
 ::-webkit-scrollbar { display: none; }
 * { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* --- GİRİŞ EKRANI (ESTETİK VERSİYON) --- */
+/* --- GİRİŞ EKRANI (ESTETİK) --- */
 #auth-screen { 
     position: fixed; inset: 0; 
     background: linear-gradient(135deg, #5865f2 0%, #2b2d31 100%);
     display: flex; justify-content: center; align-items: center; z-index: 9999; 
 }
 .auth-box { 
-    background: #313338; padding: 40px; border-radius: 12px; width: 450px; 
+    background: #313338; padding: 40px; border-radius: 8px; width: 450px; 
     box-shadow: 0 8px 24px rgba(0,0,0,0.5); text-align: center;
-    animation: fadeIn 0.5s ease;
 }
-.auth-box h2 { color: white; margin-bottom: 8px; font-size: 26px; font-weight: 700; }
-.auth-box p { color: #b5bac1; margin-bottom: 25px; }
+.auth-box h2 { color: white; margin-bottom: 8px; font-size: 24px; }
 .auth-label { text-align: left; display: block; color: #b5bac1; font-size: 12px; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; }
 .auth-box input { 
     width: 100%; padding: 12px; background: #1e1f22; border: none; 
@@ -26,19 +24,17 @@ body { background-color: #313338; color: #dbdee1; height: 100vh; display: flex; 
 }
 .auth-box button { 
     width: 100%; padding: 14px; background: #5865f2; color: white; 
-    border: none; border-radius: 4px; font-size: 16px; font-weight: 600; 
-    cursor: pointer; transition: 0.2s; margin-top: 5px;
+    border: none; border-radius: 4px; font-size: 16px; font-weight: 600; cursor: pointer;
 }
-.auth-box button:hover { background: #4752c4; }
-.register-link { color: #00a8fc; cursor: pointer; font-size: 14px; margin-top: 15px; display: block; text-decoration: none; }
-.register-link:hover { text-decoration: underline; }
+.register-link { color: #00a8fc; cursor: pointer; font-size: 14px; margin-top: 15px; display: block; }
 
-/* --- ANA ARAYÜZ --- */
+/* --- ANA EKRAN --- */
 .sidebar { width: 260px; background: #2b2d31; display: flex; flex-direction: column; }
-.chat-area { flex: 1; display: flex; flex-direction: column; background: #313338; position: relative; }
+.chat-area { flex: 1; display: flex; flex-direction: column; background: #313338; }
+.messages { flex: 1; overflow-y: auto; padding: 20px; width: 100%; }
 
-/* Mesaj Girişini Kilitleme */
-.input-locked { opacity: 0.5; pointer-events: none; filter: grayscale(1); }
+/* Mesaj Girişi Kilitli Durumu */
+.input-locked { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
 
 /* Çizgili İkonlar */
 .active-mute { color: #fa777a !important; position: relative; }
@@ -46,5 +42,3 @@ body { background-color: #313338; color: #dbdee1; height: 100vh; display: flex; 
     content: ""; position: absolute; top: 50%; left: 50%; width: 22px; height: 2px;
     background: #fa777a; transform: translate(-50%, -50%) rotate(-45deg);
 }
-
-@keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
