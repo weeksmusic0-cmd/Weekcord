@@ -1,8 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, update, get } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+import { getDatabase, ref, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
-// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyCZdeKjQKRcOiodHWA8sc4TkGH-6XiTv0g",
     authDomain: "weekcord.firebaseapp.com",
@@ -13,112 +12,165 @@ const firebaseConfig = {
     appId: "1:194115679478:web:1df6f7a62e1d3e60e368d7"
 };
 
-// Initialize
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
-// --- SESLER ---
-const sounds = {
-    msg: new Audio('sounds/message.mp3'),
-    call: new Audio('sounds/call.mp3'),
-    mute: new Audio('sounds/mute.mp3'),
-    unmute: new Audio('sounds/unmute.mp3'),
-    deafen: new Audio('sounds/deafen.mp3'),
-    undeafen: new Audio('sounds/undeafen.mp3')
-};
-sounds.call.loop = true;
-
 let currentUser = null;
+let isBotAdded = false;
 let isMuted = false;
 let isDeafened = false;
 
-// --- GİRİŞ / KAYIT ---
-const loginBtn = document.getElementById('loginBtn');
-const registerBtn = document.getElementById('registerBtn');
+const sounds = {
+    msg: new Audio('sounds/message.mp3'),
+    mute: new Audio('sounds/mute.mp3'),
+    unmute: new Audio('sounds/unmute.mp3')
+};
 
-registerBtn.onclick = async () => {
+// --- AUTH İŞLEMLERİ ---
+document.getElementById('registerBtn').onclick = async () => {
     const user = document.getElementById('usernameInput').value.trim();
     const pass = document.getElementById('passwordInput').value;
-    if(!user || pass.length < 6) return alert("Kullanıcı adı girin ve şifre en az 6 karakter olsun!");
-
     try {
-        // Kullanıcı adı kontrolü
-        const userCheck = await get(ref(db, 'users/' + user));
-        if(userCheck.exists()) return alert("Bu kullanıcı adı zaten alınmış!");
-
-        await createUserWithEmailAndPassword(auth, user + "@weekcord.com", pass);
-        await set(ref(db, 'users/' + user), { username: user, lastLogin: Date.now() });
-        alert("Kayıt başarılı! Giriş yapabilirsiniz.");
+        await createUserWithEmailAndPassword(auth, user + "@week.com", pass);
+        await update(ref(db, 'users/' + user), { username: user, lastLogin: Date.now() });
+        alert("Kayıt başarılı!");
     } catch (e) { alert("Hata: " + e.message); }
 };
 
-loginBtn.onclick = async () => {
+document.getElementById('loginBtn').onclick = async () => {
     const user = document.getElementById('usernameInput').value.trim();
     const pass = document.getElementById('passwordInput').value;
     try {
-        await signInWithEmailAndPassword(auth, user + "@weekcord.com", pass);
+        await signInWithEmailAndPassword(auth, user + "@week.com", pass);
         currentUser = user;
-        update(ref(db, 'users/' + user), { lastLogin: Date.now() });
         showApp();
     } catch (e) { alert("Giriş başarısız!"); }
 };
 
-// --- OTURUM TAKİBİ (30 GÜN KURALI) ---
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, (user) => {
     if (user) {
-        const username = user.email.split('@')[0];
-        const snapshot = await get(ref(db, 'users/' + username));
-        if (snapshot.exists()) {
-            const lastLogin = snapshot.val().lastLogin;
-            if (Date.now() - lastLogin > 30 * 24 * 60 * 60 * 1000) {
-                alert("Oturum süresi doldu (30 gün).");
-                logout();
-            } else {
-                currentUser = username;
-                showApp();
-            }
-        }
+        currentUser = user.email.split('@')[0];
+        showApp();
+        loadFriends();
     } else {
-        showAuth();
+        document.getElementById('auth-screen').style.display = 'flex';
+        document.getElementById('app-screen').style.display = 'none';
     }
 });
 
-// --- MESAJLAŞMA ---
-const chatForm = document.getElementById('chatForm');
-chatForm.onsubmit = (e) => {
-    e.preventDefault();
-    const input = document.getElementById('messageInput');
-    if(!input.value.trim()) return;
-
-    push(ref(db, 'messages'), {
-        sender: currentUser,
-        text: input.value,
-        timestamp: Date.now()
-    });
-    input.value = '';
-};
-
-// Mesajları Dinle
-onValue(ref(db, 'messages'), (snapshot) => {
-    const container = document.getElementById('messagesContainer');
+// --- ARKADAŞ LİSTESİ VE BOT ---
+function loadFriends() {
+    const container = document.getElementById('friendListContainer');
     container.innerHTML = '';
-    snapshot.forEach(child => {
-        const msg = child.val();
+
+    if (!isBotAdded) {
+        container.innerHTML = `
+            <div style="padding:15px; text-align:center;" id="bot-invite-box">
+                <p style="font-size:12px; color:#8e9297; margin-bottom:8px;">Hiç arkadaşın yok... Ama bir seçeneğin var!</p>
+                <div class="friend-item" style="background:#2f3136; justify-content:space-between; margin:0;">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <div class="friend-avatar" style="background:#5865f2">W</div>
+                        <span style="font-size:13px;">Week Bot</span>
+                    </div>
+                    <button id="addBotBtn" style="background:#3ba55c; color:white; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">Arkadaş Ekle</button>
+                </div>
+            </div>`;
+        
+        document.getElementById('addBotBtn').onclick = () => {
+            isBotAdded = true;
+            document.getElementById('addBotBtn').innerText = "Arkadaş";
+            document.getElementById('addBotBtn').style.background = "#5865f2";
+            setTimeout(loadFriends, 600);
+        };
+    } else {
         const div = document.createElement('div');
-        div.className = 'message';
-        div.innerHTML = `
-            <div class="friend-avatar">${msg.sender[0].toUpperCase()}</div>
-            <div class="message-content">
-                <h4>${msg.sender} <span>${new Date(msg.timestamp).toLocaleTimeString()}</span></h4>
-                <p>${msg.text}</p>
-            </div>
-        `;
+        div.className = 'friend-item fade-in';
+        div.onclick = () => openBotChat();
+        div.innerHTML = `<div class="friend-avatar" style="background:#5865f2">W</div> <span>Week Bot <span class="bot-tag">BOT</span></span>`;
         container.appendChild(div);
+    }
+}
+
+// --- BOT SOHBET MANTIĞI ---
+const botRepliesPositive = [
+    "Harika! Bunu duyduğuma çok sevindim. ✨", "Mükemmel! Günün nasıl geçiyor?", "Süper! Enerjin bana da geçti.",
+    "Böyle devam et! Harikasın.", "Gülümsemen eksik olmasın!", "Çok sevindim, peki ya planların ne?",
+    "Harika bir haber bu! 🎉", "Keyfin yerindeyse ben de iyiyim.", "Bomba gibisin!", "Harika! Bugün şanslı günün mü?",
+    "Çok iyi! Peki ya seni ne bu kadar mutlu etti?", "Huzur gibisi yok, çok sevindim.", "İnanılmaz! Günün geri kalanı daha iyi olsun.",
+    "Şahane! Kahveni aldın mı?", "Çok güzel! Seninle sohbet etmek keyifli.", "Enerjin harika, böyle kal!",
+    "Ne mutlu sana! Keyfini çıkar.", "Güzel! Peki ya bir şarkı açalım mı?", "Harika gidiyorsun.", "Keyfin daim olsun dostum.",
+    "Çok sevindim! Bugün senin günün.", "Harika! Başarıların devamını dilerim.", "Günün aydın olsun, çok iyi!",
+    "Müthiş! Bir kutlama yapmalıyız.", "Sevinçten uçuyorum senin adına!", "İşte bu! Tam istediğim cevap.",
+    "Harika! Yarın için de böyle ol.", "Çok pozitifsin, bayıldım!", "Böyle devam, moralin hiç bozulmasın.", "Mükemmel! Sohbetine doyum olmaz."
+];
+
+const botRepliesNegative = [
+    "Üzüldüm... Gel bir sarılalım. 🤗", "Her şey geçecek, yanındayım.", "Bazen kötü günler olur, unutma.",
+    "Seni dinlemeye hazırım, anlatmak ister misin?", "Moralini bozma, yarın yeni bir gün.", "Sana bir şarkı önermemi ister misin?",
+    "Yalnız değilsin, ben buradayım.", "Biraz dinlenmek iyi gelebilir.", "Olur öyle, canını sıkma.",
+    "Üzülme, her inişin bir çıkışı vardır.", "Sana nasıl yardımcı olabilirim?", "Biraz hava almak ister misin?",
+    "Geçecek dostum, söz veriyorum.", "Kötü günler gelip geçicidir.", "Seni anlıyorum, zor bir gün olmalı.",
+    "Canın sağ olsun, her şey düzelir.", "Kendine zaman tanı, acele etme.", "Moralini yükseltmek için buradayım.",
+    "Biraz uyu istersen, sabah daha iyi olur.", "Üzülme, sen çok değerlisin.", "Hadi gel biraz dertleşelim.",
+    "Bazen ağlamak bile iyi gelir.", "Sen güçlü birisin, bunu da atlatırsın.", "Moralin bozuksa sevdiğin bir şeyi yap.",
+    "Seni çok iyi anlıyorum, üzülme.", "Her karanlığın sonu aydınlıktır.", "Yüzünü asma, güneş yine doğacak.",
+    "Sana destek olmak için buradayım.", "Canını sıkan ne varsa anlatabilirsin.", "Üzülme, hayat sürprizlerle dolu."
+];
+
+function openBotChat() {
+    document.getElementById('currentChatName').innerText = "Week Bot ile Sohbet";
+    document.getElementById('messagesContainer').innerHTML = '';
+    document.getElementById('bot-options-container').style.display = 'flex';
+    
+    sendBotMessage("Selam! Ben Week Bot. Bugün nasılsın?");
+    showOptions(["İyiyim, sen nasılsın?", "Bu aralar biraz kötüyüm :("]);
+}
+
+function showOptions(options) {
+    const container = document.getElementById('bot-options-container');
+    container.innerHTML = '';
+    options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'bot-option-btn fade-in';
+        btn.innerText = opt;
+        btn.onclick = () => handleChoice(opt);
+        container.appendChild(btn);
     });
+}
+
+function handleChoice(choice) {
+    appendLocalMessage(currentUser, choice);
+    const isPositive = choice.includes("İyiyim");
+    const reply = isPositive 
+        ? botRepliesPositive[Math.floor(Math.random() * botRepliesPositive.length)]
+        : botRepliesNegative[Math.floor(Math.random() * botRepliesNegative.length)];
+    
+    setTimeout(() => sendBotMessage(reply), 1000);
+}
+
+function sendBotMessage(text) {
+    const container = document.getElementById('messagesContainer');
+    const div = document.createElement('div');
+    div.className = 'message fade-in';
+    div.innerHTML = `
+        <div class="friend-avatar" style="background:#5865f2">W</div>
+        <div class="message-content">
+            <h4>Week Bot <span class="bot-tag">BOT</span></h4>
+            <p>${text}</p>
+        </div>`;
+    container.appendChild(div);
     container.scrollTop = container.scrollHeight;
-    if(currentUser && !isDeafened) sounds.msg.play().catch(() => {});
-});
+    sounds.msg.play().catch(()=>{});
+}
+
+function appendLocalMessage(sender, text) {
+    const container = document.getElementById('messagesContainer');
+    const div = document.createElement('div');
+    div.className = 'message';
+    div.innerHTML = `<div class="friend-avatar">${sender[0]}</div><div class="message-content"><h4>${sender}</h4><p>${text}</p></div>`;
+    container.appendChild(div);
+}
 
 // --- SES KONTROLLERİ ---
 document.getElementById('muteBtn').onclick = () => {
@@ -130,35 +182,15 @@ document.getElementById('muteBtn').onclick = () => {
 document.getElementById('deafenBtn').onclick = () => {
     isDeafened = !isDeafened;
     document.getElementById('deafenBtn').classList.toggle('active-mute', isDeafened);
-    isDeafened ? sounds.deafen.play() : sounds.undeafen.play();
+    isDeafened ? sounds.mute.play() : sounds.unmute.play();
 };
 
-document.getElementById('startCallBtn').onclick = () => {
-    document.getElementById('call-overlay').style.display = 'flex';
-    sounds.call.play();
-};
-
-document.getElementById('endCallBtn').onclick = () => {
-    document.getElementById('call-overlay').style.display = 'none';
-    sounds.call.pause();
-    sounds.call.currentTime = 0;
-};
-
-// --- YARDIMCI FONKSİYONLAR ---
+// --- YARDIMCI ---
 function showApp() {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'flex';
     document.getElementById('myUsernameDisplay').innerText = currentUser;
     document.getElementById('myAvatar').innerText = currentUser[0].toUpperCase();
-    document.getElementById('callMyAvatar').innerText = currentUser[0].toUpperCase();
 }
 
-function showAuth() {
-    document.getElementById('auth-screen').style.display = 'flex';
-    document.getElementById('app-screen').style.display = 'none';
-}
-
-function logout() {
-    signOut(auth);
-}
-document.getElementById('logoutBtn').onclick = logout;
+document.getElementById('logoutBtn').onclick = () => signOut(auth);
