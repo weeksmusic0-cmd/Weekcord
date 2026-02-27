@@ -2,7 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/fireba
 import { getDatabase, ref, set, push, onValue, update, get, remove, onChildAdded } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
-// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyCZdeKjQKRcOiodHWA8sc4TkGH-6XiTv0g",
     authDomain: "weekcord.firebaseapp.com",
@@ -17,7 +16,6 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 
-// --- SESLER ---
 const sounds = {
     msg: new Audio('sounds/message.mp3'),
     call: new Audio('sounds/call.mp3'),
@@ -31,34 +29,23 @@ sounds.call.loop = true;
 let currentUser = null;
 let isMuted = false;
 let isDeafened = false;
-let activeChatUser = null; 
+let activeChatUser = null;
+let localStream, peerConnection;
+const servers = { iceServers: [{ urls: ['stun:stun1.l.google.com:19302'] }] };
 
-// --- WEBRTC DEĞİŞKENLERİ ---
-let localStream;
-let peerConnection;
-const servers = {
-    iceServers: [
-        { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }
-    ]
-};
-
-// --- GİRİŞ / KAYIT ---
+// --- AUTH ---
 const loginBtn = document.getElementById('loginBtn');
 const registerBtn = document.getElementById('registerBtn');
 
 registerBtn.onclick = async () => {
     const user = document.getElementById('usernameInput').value.trim();
     const pass = document.getElementById('passwordInput').value;
-    if(!user || pass.length < 6) return alert("Kullanıcı adı girin ve şifre en az 6 karakter olsun!");
-
+    if(!user || pass.length < 6) return alert("Hata!");
     try {
-        const userCheck = await get(ref(db, 'users/' + user));
-        if(userCheck.exists()) return alert("Bu kullanıcı adı zaten alınmış!");
-
         await createUserWithEmailAndPassword(auth, user + "@weekcord.com", pass);
-        await set(ref(db, 'users/' + user), { username: user, lastLogin: Date.now(), friends: {} });
-        alert("Kayıt başarılı! Giriş yapabilirsiniz.");
-    } catch (e) { alert("Hata: " + e.message); }
+        await set(ref(db, 'users/' + user), { username: user, lastLogin: Date.now() });
+        alert("Başarılı!");
+    } catch (e) { alert(e.message); }
 };
 
 loginBtn.onclick = async () => {
@@ -67,84 +54,100 @@ loginBtn.onclick = async () => {
     try {
         await signInWithEmailAndPassword(auth, user + "@weekcord.com", pass);
         currentUser = user;
-        update(ref(db, 'users/' + user), { lastLogin: Date.now() });
         showApp();
-    } catch (e) { alert("Giriş başarısız!"); }
+    } catch (e) { alert("Giriş Hatalı!"); }
 };
 
-onAuthStateChanged(auth, async (user) => {
+onAuthStateChanged(auth, (user) => {
     if (user) {
-        const username = user.email.split('@')[0];
-        const snapshot = await get(ref(db, 'users/' + username));
-        if (snapshot.exists()) {
-            currentUser = username;
-            showApp();
-            listenForCalls(); // Gelen aramaları dinle
-            checkFriends();   // Arkadaş durumunu kontrol et
-        }
+        currentUser = user.email.split('@')[0];
+        showApp();
+        listenForFriendRequests();
+        checkFriends();
+        listenForCalls();
     } else {
         showAuth();
     }
 });
 
-// --- ARKADAŞ VE BOT SİSTEMİ ---
+// --- ARKADAŞLIK SİSTEMİ ---
+function listenForFriendRequests() {
+    onChildAdded(ref(db, `friend_requests/${currentUser}`), (snapshot) => {
+        showFriendRequestPopup(snapshot.key);
+    });
+}
+
+function showFriendRequestPopup(requester) {
+    const container = document.getElementById('notification-container');
+    const popup = document.createElement('div');
+    popup.className = 'friend-request-popup';
+    popup.innerHTML = `
+        <div><strong>Arkadaşlık İsteği:</strong><br>${requester}</div>
+        <div class="req-actions">
+            <button class="yes">✅</button>
+            <button class="no">❌</button>
+        </div>
+    `;
+    container.appendChild(popup);
+
+    popup.querySelector('.yes').onclick = async () => {
+        await remove(ref(db, `friend_requests/${currentUser}/${requester}`));
+        await update(ref(db, `users/${currentUser}/friends`), { [requester]: true });
+        await update(ref(db, `users/${requester}/friends`), { [currentUser]: true });
+        popup.classList.add('slide-out');
+        setTimeout(() => popup.remove(), 500);
+    };
+
+    popup.querySelector('.no').onclick = async () => {
+        await remove(ref(db, `friend_requests/${currentUser}/${requester}`));
+        popup.classList.add('slide-out');
+        setTimeout(() => popup.remove(), 500);
+    };
+}
+
+document.getElementById('addFriendBtn').onclick = async () => {
+    const friendName = document.getElementById('addFriendInput').value.trim();
+    if(!friendName || friendName === currentUser) return;
+    const check = await get(ref(db, 'users/' + friendName));
+    if(!check.exists()) return alert("Kullanıcı yok!");
+    await set(ref(db, `friend_requests/${friendName}/${currentUser}`), { time: Date.now() });
+    alert("İstek gönderildi!");
+    document.getElementById('addFriendInput').value = '';
+};
+
 function checkFriends() {
-    onValue(ref(db, 'users/' + currentUser + '/friends'), (snapshot) => {
+    onValue(ref(db, `users/${currentUser}/friends`), (snapshot) => {
         const friends = snapshot.val();
-        const friendListContainer = document.getElementById('friendListContainer');
-        friendListContainer.innerHTML = '';
-        
-        if (!friends) {
+        const container = document.getElementById('friendListContainer');
+        container.innerHTML = '';
+        if(!friends) {
             document.getElementById('emptyFriendsScreen').style.display = 'flex';
-            document.getElementById('messagesContainer').style.display = 'none';
-            document.getElementById('chatInputContainer').style.display = 'none';
         } else {
             document.getElementById('emptyFriendsScreen').style.display = 'none';
-            Object.keys(friends).forEach(friendName => {
+            Object.keys(friends).forEach(f => {
                 const div = document.createElement('div');
                 div.className = 'friend-item';
-                div.innerHTML = `<div class="friend-avatar" style="background:${friendName==='WeekBot'?'#1abc9c':'#5865f2'};">${friendName[0]}</div> ${friendName}`;
-                div.onclick = () => openChat(friendName);
-                friendListContainer.appendChild(div);
+                div.innerHTML = `<div class="friend-avatar">${f[0]}</div> ${f}`;
+                div.onclick = () => openChat(f);
+                container.appendChild(div);
             });
         }
     });
 }
 
-// Bot Ekleme Animasyonu
 document.getElementById('addWeekBotBtn').onclick = async () => {
     const btn = document.getElementById('addWeekBotBtn');
     btn.classList.add('added');
     btn.innerText = 'Arkadaş ✓';
-    
-    setTimeout(async () => {
-        await update(ref(db, `users/${currentUser}/friends`), { "WeekBot": true });
-        openChat('WeekBot');
-    }, 800);
+    setTimeout(() => update(ref(db, `users/${currentUser}/friends`), { "WeekBot": true }), 600);
 };
 
-// Gerçek Arkadaş Ekleme
-document.getElementById('addFriendBtn').onclick = async () => {
-    const friendName = document.getElementById('addFriendInput').value.trim();
-    if(!friendName || friendName === currentUser) return;
-    
-    const userCheck = await get(ref(db, 'users/' + friendName));
-    if(!userCheck.exists()) return alert("Böyle bir kullanıcı bulunamadı!");
-    
-    await update(ref(db, `users/${currentUser}/friends`), { [friendName]: true });
-    await update(ref(db, `users/${friendName}/friends`), { [currentUser]: true });
-    document.getElementById('addFriendInput').value = '';
-    alert("Arkadaş eklendi!");
-};
-
-// --- SOHBET MANTIĞI ---
-function openChat(chatName) {
-    activeChatUser = chatName;
-    document.getElementById('emptyFriendsScreen').style.display = 'none';
+// --- SOHBET VE SONSUZ BOT ---
+function openChat(name) {
+    activeChatUser = name;
     document.getElementById('messagesContainer').style.display = 'flex';
-    document.getElementById('currentChatName').innerText = chatName;
-    
-    if (chatName === 'WeekBot') {
+    document.getElementById('currentChatName').innerText = name;
+    if(name === 'WeekBot') {
         document.getElementById('chatInputContainer').style.display = 'none';
         document.getElementById('botOptionsContainer').style.display = 'flex';
         document.getElementById('startCallBtn').style.display = 'none';
@@ -153,228 +156,109 @@ function openChat(chatName) {
         document.getElementById('chatInputContainer').style.display = 'block';
         document.getElementById('botOptionsContainer').style.display = 'none';
         document.getElementById('startCallBtn').style.display = 'block';
-        loadMessages(chatName);
+        loadMessages(name);
     }
 }
 
-// --- BOT DİYALOG AĞACI (Toplam 60 Seçenek) ---
 const botResponses = {
-    good: [
-        "Oyun oynuyorum", "Müzik dinliyorum", "Ders çalışıyorum", "Kod yazıyorum", "Kitap okuyorum",
-        "Film izliyorum", "Dışarıdayım", "Spor yapıyorum", "Yemek yiyorum", "Dinleniyorum",
-        "Sohbet ediyorum", "Geziniyorum", "YouTube izliyorum", "Proje geliştiriyorum", "Sınava hazırlanıyorum",
-        "Hobilerimle ilgileniyorum", "Tasarım yapıyorum", "Makale okuyorum", "Yürüyüş yapıyorum", "Ev işi yapıyorum",
-        "Kahve içiyorum", "Arkadaşlarımdayım", "Bisiklet sürüyorum", "Alışverişteyim", "Dizi izliyorum",
-        "Meditasyon yapıyorum", "Resim çiziyorum", "Gitar çalıyorum", "Yemek pişiriyorum", "Yeni bir dil öğreniyorum"
-    ],
-    bad: [
-        "Yalnız hissediyorum", "Çok yorgunum", "Gelecek kaygım var", "Sınavlar çok zor", "İşler ters gitti",
-        "Arkadaşımla tartıştım", "Ailevi sorunlar", "Maddi sıkıntılar", "Motivasyonum yok", "Hasta hissediyorum",
-        "Uykusuzum", "Zaman yetmiyor", "Kalbim kırık", "Haksızlığa uğradım", "Kendimi yetersiz hissediyorum",
-        "Stresliyim", "Her şey üstüme geliyor", "Anlaşılmıyorum", "Birini özlüyorum", "Hayal kırıklığı yaşadım",
-        "Canım çok sıkkın", "Havalar bunaltıyor", "Moralim bozuk", "İçimden hiçbir şey gelmiyor", "Kaybolmuş hissediyorum",
-        "Kararsızım", "Güvensizlik yaşıyorum", "Boşluktayım", "Hata yaptım", "Çok fazla baskı var"
-    ]
+    good: ["Oyun oynuyorum", "Müzik dinliyorum", "Ders çalışıyorum", "Kod yazıyorum", "Kitap okuyorum", "Film izliyorum", "Spor yapıyorum", "Yemek yiyorum", "Dinleniyorum", "Sohbet ediyorum"],
+    bad: ["Yalnız hissediyorum", "Çok yorgunum", "Sınavlar zor", "İşler ters gitti", "Moralim bozuk", "Uykusuzum", "Stresliyim", "Halsizim", "Canım sıkkın", "Mutsuzum"]
 };
 
 function appendMessage(sender, text, isBot = false) {
-    const container = document.getElementById('messagesContainer');
     const div = document.createElement('div');
     div.className = 'message';
-    div.innerHTML = `
-        <div class="friend-avatar" style="background:${isBot?'#1abc9c':'#5865f2'};">${sender[0].toUpperCase()}</div>
-        <div class="message-content">
-            <h4>${sender} ${isBot?'<span class="bot-tag">BOT</span>':''} <span class="time">${new Date().toLocaleTimeString()}</span></h4>
-            <p>${text}</p>
-        </div>
-    `;
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
-    if(!isBot && !isDeafened) sounds.msg.play().catch(()=>{});
+    div.innerHTML = `<div class="friend-avatar">${sender[0]}</div><div><h4>${sender}${isBot?'<span class="bot-tag">BOT</span>':''}</h4><p>${text}</p></div>`;
+    document.getElementById('messagesContainer').appendChild(div);
+    document.getElementById('messagesContainer').scrollTop = document.getElementById('messagesContainer').scrollHeight;
 }
 
 function startBotConversation() {
-    const container = document.getElementById('messagesContainer');
-    container.innerHTML = ''; 
-    const optionsContainer = document.getElementById('botOptionsContainer');
-    
-    // Botun ilk mesajı
-    setTimeout(() => {
-        appendMessage('Week Bot', 'Merhaba! Nasılsın?', true);
-        
-        optionsContainer.innerHTML = '';
-        const btnGood = document.createElement('button');
-        btnGood.className = 'bot-option-btn';
-        btnGood.innerText = 'İyiyim sen nasılsın?';
-        btnGood.onclick = () => handleBotChoice('İyiyim sen nasılsın?', 'good');
-        
-        const btnBad = document.createElement('button');
-        btnBad.className = 'bot-option-btn';
-        btnBad.innerText = 'Bu aralar biraz kötüyüm :(';
-        btnBad.onclick = () => handleBotChoice('Bu aralar biraz kötüyüm :(', 'bad');
-        
-        optionsContainer.appendChild(btnGood);
-        optionsContainer.appendChild(btnBad);
-    }, 500);
+    document.getElementById('messagesContainer').innerHTML = '';
+    appendMessage('Week Bot', 'Selam! Nasıl gidiyor?', true);
+    showBotMainOptions();
 }
 
-function handleBotChoice(userText, type) {
-    appendMessage(currentUser, userText, false);
-    const optionsContainer = document.getElementById('botOptionsContainer');
-    optionsContainer.innerHTML = ''; // Seçenekleri temizle
-    
-    setTimeout(() => {
-        if(type === 'good') {
-            appendMessage('Week Bot', 'Harika duyduğuma sevindim! Neler yapıyorsun peki?', true);
-            botResponses.good.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'bot-option-btn';
-                btn.innerText = opt;
-                btn.onclick = () => { appendMessage(currentUser, opt, false); optionsContainer.innerHTML=''; setTimeout(()=>appendMessage('Week Bot', 'Kulağa çok hoş geliyor! İyi eğlenceler.', true), 500); };
-                optionsContainer.appendChild(btn);
-            });
-        } else {
-            appendMessage('Week Bot', 'Kötü günler hep geçicidir. Seni ne rahatsız ediyor, anlatmak ister misin?', true);
-            botResponses.bad.forEach(opt => {
-                const btn = document.createElement('button');
-                btn.className = 'bot-option-btn';
-                btn.innerText = opt;
-                btn.onclick = () => { appendMessage(currentUser, opt, false); optionsContainer.innerHTML=''; setTimeout(()=>appendMessage('Week Bot', 'Anlıyorum... Bazen sadece zamana bırakmak veya birine anlatmak iyi gelir. Ben hep buradayım.', true), 500); };
-                optionsContainer.appendChild(btn);
-            });
-        }
-    }, 500);
+function showBotMainOptions() {
+    const opt = document.getElementById('botOptionsContainer');
+    opt.innerHTML = '';
+    const b1 = document.createElement('button'); b1.className = 'bot-option-btn'; b1.innerText = 'İyiyim, sen?';
+    b1.onclick = () => handleChoice('İyiyim, sen?', 'good');
+    const b2 = document.createElement('button'); b2.className = 'bot-option-btn'; b2.innerText = 'Biraz kötüyüm...';
+    b2.onclick = () => handleChoice('Biraz kötüyüm...', 'bad');
+    opt.appendChild(b1); opt.appendChild(b2);
 }
 
-// Gerçek İnsanlarla Mesajlaşma
-const chatForm = document.getElementById('chatForm');
-chatForm.onsubmit = (e) => {
-    e.preventDefault();
-    if(!activeChatUser || activeChatUser === 'WeekBot') return;
-    
-    const input = document.getElementById('messageInput');
-    if(!input.value.trim()) return;
-
-    const chatId = [currentUser, activeChatUser].sort().join('_');
-    push(ref(db, `direct_messages/${chatId}`), {
-        sender: currentUser, text: input.value, timestamp: Date.now()
-    });
-    input.value = '';
-};
-
-function loadMessages(chatName) {
-    const chatId = [currentUser, chatName].sort().join('_');
-    onValue(ref(db, `direct_messages/${chatId}`), (snapshot) => {
-        const container = document.getElementById('messagesContainer');
-        container.innerHTML = '';
-        snapshot.forEach(child => {
-            const msg = child.val();
-            appendMessage(msg.sender, msg.text, false);
+function handleChoice(txt, type) {
+    appendMessage(currentUser, txt);
+    document.getElementById('botOptionsContainer').innerHTML = '';
+    setTimeout(() => {
+        appendMessage('Week Bot', type==='good'?'Harika! Neler yapıyorsun?':'Üzüldüm... Seni ne yordu?', true);
+        botResponses[type].forEach(r => {
+            const b = document.createElement('button'); b.className = 'bot-option-btn'; b.innerText = r;
+            b.onclick = () => {
+                appendMessage(currentUser, r);
+                document.getElementById('botOptionsContainer').innerHTML = '';
+                setTimeout(() => {
+                    appendMessage('Week Bot', 'Anlıyorum, her zaman yanındayım. Peki başka anlatmak istediğin bir şey var mı?', true);
+                    showBotMainOptions(); // Döngüyü başa sarar (Sonsuz konuşma)
+                }, 800);
+            };
+            document.getElementById('botOptionsContainer').appendChild(b);
         });
-    });
+    }, 800);
 }
 
-// --- SES KONTROLLERİ VE EMOJİ DEĞİŞİMİ ---
+// --- SES VE ARAMA ---
 document.getElementById('muteBtn').onclick = () => {
     isMuted = !isMuted;
-    const btn = document.getElementById('muteBtn');
-    btn.classList.toggle('active-mute', isMuted);
-    // Çizgili emoji değişimi
-    btn.innerText = isMuted ? '🔇' : '🎤';
+    document.getElementById('muteBtn').innerText = isMuted ? '🔇' : '🎤';
+    document.getElementById('muteBtn').classList.toggle('active-mute', isMuted);
     isMuted ? sounds.mute.play() : sounds.unmute.play();
-    
-    // WebRTC ses akışını kes
-    if(localStream) {
-        localStream.getAudioTracks()[0].enabled = !isMuted;
-    }
+    if(localStream) localStream.getAudioTracks()[0].enabled = !isMuted;
 };
 
 document.getElementById('deafenBtn').onclick = () => {
     isDeafened = !isDeafened;
-    const btn = document.getElementById('deafenBtn');
-    btn.classList.toggle('active-mute', isDeafened);
-    // Çizgili emoji değişimi
-    btn.innerText = isDeafened ? '🔕' : '🎧';
+    document.getElementById('deafenBtn').innerText = isDeafened ? '🔕' : '🎧';
+    document.getElementById('deafenBtn').classList.toggle('active-mute', isDeafened);
     isDeafened ? sounds.deafen.play() : sounds.undeafen.play();
-    
-    // Gelen sesi kes
     document.getElementById('remoteAudio').muted = isDeafened;
 };
 
-// --- WEBRTC GERÇEK SESLİ ARAMA SİSTEMİ ---
 document.getElementById('startCallBtn').onclick = async () => {
-    if(!activeChatUser || activeChatUser === 'WeekBot') return;
-    
     document.getElementById('call-overlay').style.display = 'flex';
-    document.getElementById('callStatusText').innerText = "Aranıyor: " + activeChatUser;
+    document.getElementById('callStatusText').innerText = activeChatUser + " aranıyor...";
     sounds.call.play();
-
-    // Mikrofon izni al
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    
+    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     peerConnection = new RTCPeerConnection(servers);
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-    peerConnection.ontrack = (event) => {
-        document.getElementById('remoteAudio').srcObject = event.streams[0];
-    };
-
-    const callDoc = ref(db, `calls/${activeChatUser}`);
-    
-    peerConnection.onicecandidate = (event) => {
-        if(event.candidate) {
-            push(ref(db, `calls/${activeChatUser}/candidates`), event.candidate.toJSON());
-        }
-    };
-
+    localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+    peerConnection.ontrack = e => document.getElementById('remoteAudio').srcObject = e.streams[0];
     const offer = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offer);
-    
-    await set(callDoc, {
-        caller: currentUser,
-        offer: { type: offer.type, sdp: offer.sdp }
-    });
-
-    // Karşı tarafın cevabını bekle
-    onValue(ref(db, `calls/${activeChatUser}/answer`), async (snapshot) => {
-        const answer = snapshot.val();
-        if(answer && !peerConnection.currentRemoteDescription) {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-            document.getElementById('callStatusText').innerText = "Bağlandı!";
+    await set(ref(db, `calls/${activeChatUser}`), { caller: currentUser, offer });
+    onValue(ref(db, `calls/${activeChatUser}/answer`), async s => {
+        if(s.val() && !peerConnection.currentRemoteDescription) {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(s.val()));
             sounds.call.pause();
         }
     });
 };
 
 function listenForCalls() {
-    onValue(ref(db, `calls/${currentUser}`), async (snapshot) => {
-        const data = snapshot.val();
-        if(data && data.offer) {
+    onValue(ref(db, `calls/${currentUser}`), async s => {
+        const d = s.val();
+        if(d && d.offer) {
             document.getElementById('call-overlay').style.display = 'flex';
-            document.getElementById('callStatusText').innerText = "Gelen Arama: " + data.caller;
             sounds.call.play();
-
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             peerConnection = new RTCPeerConnection(servers);
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-            peerConnection.ontrack = (event) => {
-                document.getElementById('remoteAudio').srcObject = event.streams[0];
-            };
-
-            peerConnection.onicecandidate = (event) => {
-                if(event.candidate) {
-                    push(ref(db, `calls/${data.caller}/answerCandidates`), event.candidate.toJSON());
-                }
-            };
-
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
+            peerConnection.ontrack = e => document.getElementById('remoteAudio').srcObject = e.streams[0];
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(d.offer));
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
-
-            await set(ref(db, `calls/${currentUser}/answer`), {
-                type: answer.type, sdp: answer.sdp
-            });
+            await set(ref(db, `calls/${currentUser}/answer`), answer);
             sounds.call.pause();
         }
     });
@@ -383,29 +267,33 @@ function listenForCalls() {
 document.getElementById('endCallBtn').onclick = () => {
     document.getElementById('call-overlay').style.display = 'none';
     sounds.call.pause();
-    sounds.call.currentTime = 0;
-    
     if(peerConnection) peerConnection.close();
-    if(localStream) localStream.getTracks().forEach(track => track.stop());
-    
-    // Veritabanından aramayı temizle
     remove(ref(db, `calls/${currentUser}`));
     if(activeChatUser) remove(ref(db, `calls/${activeChatUser}`));
 };
 
-// --- YARDIMCI FONKSİYONLAR ---
-function showApp() {
-    document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app-screen').style.display = 'flex';
+function loadMessages(c) {
+    const id = [currentUser, c].sort().join('_');
+    onValue(ref(db, `direct_messages/${id}`), s => {
+        document.getElementById('messagesContainer').innerHTML = '';
+        s.forEach(m => appendMessage(m.val().sender, m.val().text));
+    });
+}
+
+document.getElementById('chatForm').onsubmit = (e) => {
+    e.preventDefault();
+    const i = document.getElementById('messageInput');
+    if(!i.value || !activeChatUser) return;
+    const id = [currentUser, activeChatUser].sort().join('_');
+    push(ref(db, `direct_messages/${id}`), { sender: currentUser, text: i.value });
+    i.value = '';
+};
+
+function showApp() { 
+    document.getElementById('auth-screen').style.display = 'none'; 
+    document.getElementById('app-screen').style.display = 'flex'; 
     document.getElementById('myUsernameDisplay').innerText = currentUser;
     document.getElementById('myAvatar').innerText = currentUser[0].toUpperCase();
-    document.getElementById('callMyAvatar').innerText = currentUser[0].toUpperCase();
 }
-
-function showAuth() {
-    document.getElementById('auth-screen').style.display = 'flex';
-    document.getElementById('app-screen').style.display = 'none';
-}
-
-function logout() { signOut(auth); }
-document.getElementById('logoutBtn').onclick = logout;
+function showAuth() { document.getElementById('auth-screen').style.display = 'flex'; document.getElementById('app-screen').style.display = 'none'; }
+document.getElementById('logoutBtn').onclick = () => signOut(auth);
