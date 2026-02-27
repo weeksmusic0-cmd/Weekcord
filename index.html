@@ -10,7 +10,7 @@
 
     <div id="auth-screen" class="fade-in">
         <div class="auth-box">
-            <h2>WeekCord'a Hoş Geldin</h2>
+            <h2>WeekCord</h2>
             <div id="auth-error" style="color: #ed4245; margin-bottom: 10px; display: none;"></div>
             <input type="text" id="usernameInput" placeholder="Kullanıcı Adı">
             <input type="password" id="passwordInput" placeholder="Şifre">
@@ -23,30 +23,37 @@
         <div class="sidebar">
             <div class="sidebar-header"><h3>Sohbetler</h3></div>
             <div class="friend-add-box">
-                <input type="text" id="addFriendInput" placeholder="Arkadaş ara...">
+                <input type="text" id="addFriendInput" placeholder="Kullanıcı ara...">
                 <button id="addFriendBtn">Ekle</button>
             </div>
+            
             <div class="friend-list" id="friendListContainer"></div>
             
             <div class="user-panel">
                 <div class="user-info">
                     <div class="friend-avatar" id="myAvatar">?</div>
-                    <strong id="myUsernameDisplay">Yükleniyor...</strong>
+                    <strong id="myUsernameDisplay">...</strong>
                 </div>
                 <div class="voice-controls">
-                    <button id="muteBtn" title="Sustur">🎤</button>
-                    <button id="deafenBtn" title="Sağırlaştır">🎧</button>
-                    <button id="logoutBtn" title="Çıkış">🚪</button>
+                    <button id="muteBtn">🎤</button>
+                    <button id="deafenBtn">🎧</button>
+                    <button id="logoutBtn">🚪</button>
                 </div>
             </div>
         </div>
 
         <div class="chat-area">
             <div class="chat-header">
-                <span id="currentChatName"># genel-sohbet</span>
-                <button class="call-btn" id="startCallBtn">📞 Sesli Ara</button>
+                <span id="currentChatName">Bir sohbet seçin</span>
+                <button class="call-btn" id="startCallBtn" style="display:none;">📞 Sesli Ara</button>
             </div>
-            <div class="messages" id="messagesContainer"></div>
+            
+            <div class="messages" id="messagesContainer">
+                <div style="text-align:center; color:#72767d; margin-top:20px;">Hoş geldin! Soldan bir arkadaş seçerek başla.</div>
+            </div>
+
+            <div id="bot-options-container" style="display:none;"></div>
+
             <div class="chat-input">
                 <form id="chatForm">
                     <input type="text" id="messageInput" placeholder="Mesaj gönder..." autocomplete="off">
@@ -56,8 +63,8 @@
     </div>
 
     <div id="call-overlay" class="fade-in" style="display: none;">
-        <div class="call-avatar speaking" id="callMyAvatar">B</div>
-        <h2 style="color:white; margin-top:20px;">Arama Yapılıyor...</h2>
+        <div class="call-avatar speaking" id="callMyAvatar">W</div>
+        <h2 style="color:white; margin-top:20px;">Aranıyor...</h2>
         <button class="end-call-btn" id="endCallBtn" style="margin-top:30px;">📞 Kapat</button>
     </div>
 
