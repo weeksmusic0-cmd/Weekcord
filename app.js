@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, get, update } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
+import { getDatabase, ref, set, get, update, onValue } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-database.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/12.10.0/firebase-auth.js";
 
 const firebaseConfig = {
@@ -17,11 +17,9 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 
 let currentUser = null;
-let currentChat = null;
 
-// --- GİRİŞ VE PERSISTENCE (F5 Koruması) ---
-// Tarayıcı kapatılsa bile girişi hatırlar
-setPersistence(auth, browserLocalPersistence);
+// --- GİRİŞ KONTROLLERİ ---
+setPersistence(auth, browserLocalPersistence); // F5 atınca çıkış yapmaz
 
 onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -31,17 +29,15 @@ onAuthStateChanged(auth, async (user) => {
         
         if (snapshot.exists()) {
             const lastLogin = snapshot.val().lastLogin || 0;
-            const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-
-            // 30 Gün Kontrolü
-            if (Date.now() - lastLogin > thirtyDays) {
-                alert("Oturum süresi doldu (30 gün). Lütfen tekrar giriş yapın.");
+            // 30 Gün Kuralı
+            if (Date.now() - lastLogin > (30 * 24 * 60 * 60 * 1000)) {
+                alert("Oturumun süresi doldu, tekrar giriş yap.");
                 signOut(auth);
             } else {
                 currentUser = username;
-                update(userRef, { lastLogin: Date.now() }); // Giriş vaktini güncelle
+                update(userRef, { lastLogin: Date.now() });
                 showApp();
-                checkBotStatus(); // Bot ekli mi kontrol et
+                loadSidebar();
             }
         }
     } else {
@@ -49,77 +45,74 @@ onAuthStateChanged(auth, async (user) => {
     }
 });
 
-// Kayıt Ol Butonu Fix
-document.getElementById('registerBtn').addEventListener('click', async () => {
+// Kayıt Ol
+document.getElementById('registerBtn').onclick = async () => {
     const user = document.getElementById('usernameInput').value.trim();
     const pass = document.getElementById('passwordInput').value;
-    if(!user || pass.length < 6) return alert("Bilgileri kontrol edin!");
-    
     try {
         await createUserWithEmailAndPassword(auth, user + "@week.com", pass);
-        await set(ref(db, 'users/' + user), { 
-            username: user, 
-            lastLogin: Date.now(),
-            botAdded: false 
-        });
-        alert("Kayıt başarılı!");
+        await set(ref(db, 'users/' + user), { username: user, lastLogin: Date.now(), botAdded: false });
+        alert("Hesap oluşturuldu! Şimdi giriş yapabilirsin.");
     } catch (e) { alert("Hata: " + e.message); }
-});
+};
 
-// Giriş Yap Butonu Fix
-document.getElementById('loginBtn').addEventListener('click', async () => {
+// Giriş Yap
+document.getElementById('loginBtn').onclick = async () => {
     const user = document.getElementById('usernameInput').value.trim();
     const pass = document.getElementById('passwordInput').value;
     try {
         await signInWithEmailAndPassword(auth, user + "@week.com", pass);
-    } catch (e) { alert("Giriş bilgileri hatalı!"); }
-});
+    } catch (e) { alert("Giriş bilgileri yanlış!"); }
+};
 
-// --- BOT VE SOHBET KİLİDİ ---
-const inputWrapper = document.getElementById('chatInputWrapper');
-const messageInput = document.getElementById('messageInput');
-
-// Başlangıçta sohbeti kilitle
-inputWrapper.classList.add('input-locked');
-
-async function checkBotStatus() {
-    const snapshot = await get(ref(db, 'users/' + currentUser + '/botAdded'));
-    renderFriends(snapshot.val());
-}
-
-function renderFriends(isBotAdded) {
+// --- SİDEBAR & BOT MANTIĞI ---
+async function loadSidebar() {
     const container = document.getElementById('friendListContainer');
+    const userSnapshot = await get(ref(db, 'users/' + currentUser));
+    const isBotAdded = userSnapshot.val().botAdded;
+
     container.innerHTML = '';
 
     if (!isBotAdded) {
-        // Bot ekleme daveti
-        container.innerHTML = `<div id="bot-invite">... (Bot ekleme kutusu) ...</div>`;
+        container.innerHTML = `
+            <div style="padding:10px; text-align:center;">
+                <p style="font-size:11px; color:#8e9297;">Hiç arkadaşın yok...</p>
+                <button id="addBotBtn" style="background:#3ba55c; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; margin-top:5px;">Week Bot Ekle</button>
+            </div>`;
         document.getElementById('addBotBtn').onclick = async () => {
             await update(ref(db, 'users/' + currentUser), { botAdded: true });
-            renderFriends(true);
+            loadSidebar();
         };
     } else {
-        // Botu listeye ekle
         const div = document.createElement('div');
         div.className = 'friend-item';
-        div.onclick = () => {
-            currentChat = "Week Bot";
-            document.getElementById('currentChatName').innerText = "Week Bot ile Sohbet";
-            inputWrapper.classList.remove('input-locked'); // Kilidi aç
-            messageInput.placeholder = "Week Bot'a mesaj gönder...";
-            openBotChat();
-        };
-        div.innerHTML = `<span>Week Bot</span>`;
+        div.style.padding = "10px";
+        div.style.cursor = "pointer";
+        div.innerHTML = `<span>Week Bot 🤖</span>`;
+        div.onclick = () => openChat("Week Bot");
         container.appendChild(div);
     }
+}
+
+function openChat(name) {
+    document.getElementById('currentChatName').innerText = name;
+    document.getElementById('chatInputWrapper').classList.remove('input-locked');
+    document.getElementById('messageInput').placeholder = name + " kişisine mesaj gönder";
+    document.getElementById('welcome-message').style.display = 'none';
+    // Bot sohbetini başlat
+    if(name === "Week Bot") startBotConvo();
 }
 
 function showApp() {
     document.getElementById('auth-screen').style.display = 'none';
     document.getElementById('app-screen').style.display = 'flex';
+    document.getElementById('myUsernameDisplay').innerText = currentUser;
 }
 
 function showAuth() {
     document.getElementById('auth-screen').style.display = 'flex';
     document.getElementById('app-screen').style.display = 'none';
 }
+
+// Çıkış Yap
+document.getElementById('logoutBtn').onclick = () => signOut(auth);
